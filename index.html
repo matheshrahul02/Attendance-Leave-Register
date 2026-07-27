@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Muster &amp; Leave Register</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@400;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <span class="eyebrow">Department Muster &amp; Leave Register</span>
+      <h1>Attendance &amp; Leave Register</h1>
+      <p>One book for who showed up and who's owed what.</p>
+    </div>
+    <div class="muster-date">
+      Latest muster date
+      <b id="musterDateLabel">—</b>
+    </div>
+  </header>
+
+  <div class="dev-row">
+    <button class="dev-btn" id="simErrorBtn" type="button">Simulate connection issue (test)</button>
+  </div>
+
+  <section class="stats" id="stats" aria-label="Today's summary"></section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Records</h2>
+      <span class="count-pill" id="countPill">—</span>
+    </div>
+    <div class="controls">
+      <input type="search" id="searchInput" placeholder="Search by name, staff ID or record ID…" aria-label="Search records">
+      <select id="statusFilter" aria-label="Filter by status">
+        <option value="">All statuses</option>
+        <option value="Present">Present</option>
+        <option value="Absent">Absent</option>
+        <option value="On Leave">On Leave</option>
+        <option value="Half Day">Half Day</option>
+      </select>
+      <select id="leaveFilter" aria-label="Filter by leave type">
+        <option value="">All leave types</option>
+        <option value="Casual Leave">Casual Leave</option>
+        <option value="Sick Leave">Sick Leave</option>
+        <option value="Earned Leave">Earned Leave</option>
+        <option value="Unpaid Leave">Unpaid Leave</option>
+      </select>
+    </div>
+    <div class="row-head">
+      <div>Staff</div><div>Date</div><div>Status</div><div>Leave type</div><div>Days</div><div>Balance</div>
+    </div>
+    <div class="list" id="listBody"></div>
+  </section>
+
+  <footer class="note">Data shown is a sample dataset for demonstration. Tap or click any row to open its full record.</footer>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="detail" id="detailBox" role="dialog" aria-modal="true"></div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
