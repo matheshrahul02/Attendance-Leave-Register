@@ -12,51 +12,193 @@
 
 <div class="wrap">
 
-  <header class="top">
-    <div class="brand">
-      <span class="eyebrow">Department Muster &amp; Leave Register</span>
-      <h1>Attendance &amp; Leave Register</h1>
-      <p>One book for who showed up and who's owed what.</p>
-    </div>
-    <div class="muster-date">
-      Latest muster date
-      <b id="musterDateLabel">—</b>
-    </div>
-  </header>
-
-  <div class="dev-row">
-    <button class="dev-btn" id="simErrorBtn" type="button">Simulate connection issue (test)</button>
+  <!-- View Toggle -->
+  <div class="view-toggle">
+    <button class="toggle-btn active" id="managerViewBtn" data-view="manager">📊 Manager View</button>
+    <button class="toggle-btn" id="staffViewBtn" data-view="staff">✅ Staff Login</button>
   </div>
 
-  <section class="stats" id="stats" aria-label="Today's summary"></section>
+  <!-- MANAGER VIEW -->
+  <div id="managerView">
+    <!-- Manager Login Section -->
+    <div id="managerLoginSection">
+      <header class="top manager-header">
+        <div class="brand">
+          <span class="eyebrow">Manager Portal</span>
+          <h1>Manager Login</h1>
+          <p>Enter the manager password to access the register.</p>
+        </div>
+        <div class="muster-date">
+          <span style="font-size:11px;color:#B9CBB9;">Password: <b style="color:#F3EFE2;">admin123</b></span>
+        </div>
+      </header>
 
-  <section class="panel">
-    <div class="panel-head">
-      <h2>Records</h2>
-      <span class="count-pill" id="countPill">—</span>
+      <div class="login-panel">
+        <div class="login-form">
+          <div class="form-group">
+            <label for="managerPassword">Enter Manager Password</label>
+            <input type="password" id="managerPassword" placeholder="Enter password" />
+          </div>
+          <button class="login-btn" id="managerLoginBtn">Login as Manager</button>
+          <div id="managerLoginMessage" class="login-message"></div>
+        </div>
+      </div>
     </div>
-    <div class="controls">
-      <input type="search" id="searchInput" placeholder="Search by name, staff ID or record ID…" aria-label="Search records">
-      <select id="statusFilter" aria-label="Filter by status">
-        <option value="">All statuses</option>
-        <option value="Present">Present</option>
-        <option value="Absent">Absent</option>
-        <option value="On Leave">On Leave</option>
-        <option value="Half Day">Half Day</option>
-      </select>
-      <select id="leaveFilter" aria-label="Filter by leave type">
-        <option value="">All leave types</option>
-        <option value="Casual Leave">Casual Leave</option>
-        <option value="Sick Leave">Sick Leave</option>
-        <option value="Earned Leave">Earned Leave</option>
-        <option value="Unpaid Leave">Unpaid Leave</option>
-      </select>
+
+    <!-- Manager Dashboard (shown after login) -->
+    <div id="managerDashboard" style="display:none;">
+      <!-- Row counter at the very top -->
+      <div class="row-counter" id="rowCounter">
+        <span class="counter-label">Rows shown:</span>
+        <span class="counter-number" id="counterNumber">—</span>
+        <span class="counter-total">/ <span id="counterTotal">—</span> total</span>
+        <span style="margin-left:auto;font-size:11px;color:#8A9E8A;">
+          👤 Manager 
+          <button class="logout-btn-small" id="managerLogoutBtn">Logout</button>
+        </span>
+      </div>
+
+      <header class="top">
+        <div class="brand">
+          <span class="eyebrow">Department Muster &amp; Leave Register</span>
+          <h1>Attendance &amp; Leave Register</h1>
+          <p>One book for who showed up and who's owed what.</p>
+        </div>
+        <div class="muster-date">
+          Latest muster date
+          <b id="musterDateLabel">—</b>
+        </div>
+      </header>
+
+      <div class="dev-row">
+        <button class="dev-btn" id="simErrorBtn" type="button">Simulate connection issue (test)</button>
+      </div>
+
+      <section class="stats" id="stats" aria-label="Today's summary"></section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Records</h2>
+          <span class="count-pill" id="countPill">—</span>
+        </div>
+        <div class="controls">
+          <input type="search" id="searchInput" placeholder="Search by name, staff ID or record ID…" aria-label="Search records">
+          <select id="statusFilter" aria-label="Filter by status">
+            <option value="">All statuses</option>
+            <option value="Present">Present</option>
+            <option value="Absent">Absent</option>
+            <option value="On Leave">On Leave</option>
+            <option value="Half Day">Half Day</option>
+          </select>
+          <select id="leaveFilter" aria-label="Filter by leave type">
+            <option value="">All leave types</option>
+            <option value="Casual Leave">Casual Leave</option>
+            <option value="Sick Leave">Sick Leave</option>
+            <option value="Earned Leave">Earned Leave</option>
+            <option value="Unpaid Leave">Unpaid Leave</option>
+          </select>
+        </div>
+        <div class="row-head">
+          <div>Staff</div><div>Date</div><div>Status</div><div>Leave type</div><div>Days</div><div>Balance</div>
+        </div>
+        <div class="list" id="listBody"></div>
+      </section>
     </div>
-    <div class="row-head">
-      <div>Staff</div><div>Date</div><div>Status</div><div>Leave type</div><div>Days</div><div>Balance</div>
+  </div>
+
+  <!-- STAFF LOGIN & ATTENDANCE VIEW -->
+  <div id="staffView" style="display:none;">
+    <!-- Staff Login Section -->
+    <div id="staffLoginSection">
+      <header class="top staff-header">
+        <div class="brand">
+          <span class="eyebrow">Staff Portal</span>
+          <h1>Staff Login</h1>
+          <p>Login to mark your attendance and view your records.</p>
+        </div>
+        <div class="muster-date">
+          Today's date
+          <b id="todayDateLabel">—</b>
+        </div>
+      </header>
+
+      <div class="login-panel">
+        <div class="login-form">
+          <div class="form-group">
+            <label for="loginStaffSelect">Select Your Name</label>
+            <select id="loginStaffSelect">
+              <option value="">— Choose your name —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="loginPassword">Enter Your PIN</label>
+            <input type="password" id="loginPassword" placeholder="Enter PIN (1234)" maxlength="4" />
+            <span style="font-size:11px;color:var(--ink-soft);display:block;margin-top:4px;">Default PIN: 1234</span>
+          </div>
+          <button class="login-btn" id="loginBtn">Login</button>
+          <div id="loginMessage" class="login-message"></div>
+        </div>
+      </div>
     </div>
-    <div class="list" id="listBody"></div>
-  </section>
+
+    <!-- Staff Dashboard (shown after login) -->
+    <div id="staffDashboard" style="display:none;">
+      <header class="top staff-header">
+        <div class="brand">
+          <span class="eyebrow">Staff Dashboard</span>
+          <h1>Welcome, <span id="loggedInStaffName">—</span></h1>
+          <p>Mark your attendance and view your records.</p>
+        </div>
+        <div class="muster-date">
+          <button class="logout-btn" id="logoutBtn">🚪 Logout</button>
+        </div>
+      </header>
+
+      <div class="staff-attendance-panel">
+        <div class="attendance-form">
+          <div class="form-group">
+            <label>Mark Attendance for Today</label>
+            <div class="attendance-options">
+              <button class="attendance-btn present-btn" data-status="Present">✅ Present</button>
+              <button class="attendance-btn absent-btn" data-status="Absent">❌ Absent</button>
+              <button class="attendance-btn leave-btn" data-status="On Leave">📅 On Leave</button>
+              <button class="attendance-btn half-btn" data-status="Half Day">◐ Half Day</button>
+            </div>
+          </div>
+
+          <div class="form-group leave-type-group" id="staffLeaveTypeGroup" style="display:none;">
+            <label for="staffLeaveTypeSelect">Leave Type (if On Leave or Half Day)</label>
+            <select id="staffLeaveTypeSelect">
+              <option value="Casual Leave">Casual Leave</option>
+              <option value="Sick Leave">Sick Leave</option>
+              <option value="Earned Leave">Earned Leave</option>
+              <option value="Unpaid Leave">Unpaid Leave</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <button class="submit-attendance-btn" id="staffSubmitAttendanceBtn">Submit Attendance</button>
+          </div>
+
+          <div id="staffAttendanceMessage" class="attendance-message"></div>
+
+          <div class="staff-summary">
+            <h4>Your Leave Summary</h4>
+            <div id="staffLeaveSummary" class="leave-summary">
+              <p>Loading...</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="staff-history">
+          <h3>Your Attendance History</h3>
+          <div id="staffHistoryList" class="staff-history-list">
+            <p class="empty-history">Login to view your history.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <footer class="note">Data shown is a sample dataset for demonstration. Tap or click any row to open its full record.</footer>
 </div>
