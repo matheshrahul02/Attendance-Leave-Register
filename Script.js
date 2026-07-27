@@ -1,19 +1,9 @@
 /* ======================= SAMPLE DATA ======================= */
-/* Field reference:
-   record_id         – unique ID of this muster/leave entry, e.g. "R001"
-   staff_id          – unique ID of the staff member, e.g. "S001" (names can repeat, IDs never do)
-   staff_name        – staff member's display name
-   date              – date of the entry, YYYY-MM-DD
-   status             – "Present" | "Absent" | "On Leave" | "Half Day"
-   leave_type        – "Casual Leave" | "Sick Leave" | "Earned Leave" | "Unpaid Leave" | null
-                        (null when the day was not a leave day, i.e. Present/Absent)
-   days_taken        – leave days consumed by this entry (0.5 for Half Day). null = not recorded (data gap)
-   balance_remaining – staff member's combined annual leave balance immediately after this entry.
-                        null = not recorded on the muster sheet for this entry (data gap)
-*/
-const ENTITLEMENT = 24; // annual combined leave entitlement per staff member, in days
+const ENTITLEMENT = 24;
+const STAFF_PIN = "1234";
+const MANAGER_PASSWORD = "admin123";
 
-const RECORDS = [
+let RECORDS = [
   {record_id:"R001",staff_id:"S001",staff_name:"Arun Kumar",date:"2026-06-01",status:"Present",leave_type:null,days_taken:null,balance_remaining:24},
   {record_id:"R002",staff_id:"S001",staff_name:"Arun Kumar",date:"2026-06-05",status:"On Leave",leave_type:"Casual Leave",days_taken:1,balance_remaining:23},
   {record_id:"R003",staff_id:"S001",staff_name:"Arun Kumar",date:"2026-06-15",status:"On Leave",leave_type:"Sick Leave",days_taken:2,balance_remaining:21},
@@ -55,17 +45,15 @@ const RECORDS = [
   {record_id:"R029",staff_id:"S008",staff_name:"Kavitha Raman",date:"2026-06-09",status:"Present",leave_type:null,days_taken:null,balance_remaining:24},
   {record_id:"R030",staff_id:"S008",staff_name:"Kavitha Raman",date:"2026-06-19",status:"On Leave",leave_type:"Earned Leave",days_taken:6,balance_remaining:18},
   {record_id:"R031",staff_id:"S008",staff_name:"Kavitha Raman",date:"2026-07-01",status:"On Leave",leave_type:"Sick Leave",days_taken:2,balance_remaining:16},
-  {record_id:"R032",staff_id:"S008",staff_name:"Kavitha Raman",date:"2026-07-14",status:"Present",leave_type:null,days_taken:null,balance_remaining:16},
+  {record_id:"R032",staff_id:"S008",staff_name:"Kavitha Raman",date:"2026-07-14",status:"Present",leave_type:null,balance_remaining:16},
 
   {record_id:"R033",staff_id:"S009",staff_name:"Joseph Thomas",date:"2026-06-11",status:"Present",leave_type:null,days_taken:null,balance_remaining:24},
   {record_id:"R034",staff_id:"S009",staff_name:"Joseph Thomas",date:"2026-06-21",status:"On Leave",leave_type:"Casual Leave",days_taken:1,balance_remaining:23},
   {record_id:"R035",staff_id:"S009",staff_name:"Joseph Thomas",date:"2026-07-02",status:"Absent",leave_type:null,days_taken:null,balance_remaining:23},
   {record_id:"R036",staff_id:"S009",staff_name:"Joseph Thomas",date:"2026-07-15",status:"On Leave",leave_type:"Earned Leave",days_taken:2,balance_remaining:21},
 
-  // Deliberate case: only ONE record exists for this staff member (no related entries when opened)
   {record_id:"R037",staff_id:"S010",staff_name:"Anitha George",date:"2026-07-16",status:"On Leave",leave_type:"Sick Leave",days_taken:1,balance_remaining:23},
 
-  // Staff member who has run their entitlement all the way down to zero
   {record_id:"R041",staff_id:"S011",staff_name:"Ganesh Pillai",date:"2026-06-13",status:"Present",leave_type:null,days_taken:null,balance_remaining:24},
   {record_id:"R042",staff_id:"S011",staff_name:"Ganesh Pillai",date:"2026-06-23",status:"On Leave",leave_type:"Earned Leave",days_taken:12,balance_remaining:12},
   {record_id:"R043",staff_id:"S011",staff_name:"Ganesh Pillai",date:"2026-07-03",status:"On Leave",leave_type:"Sick Leave",days_taken:8,balance_remaining:4},
@@ -74,14 +62,20 @@ const RECORDS = [
 
 /* ======================= APP STATE ======================= */
 const state = {
-  loadPhase: "loading", // loading | loaded | error
+  loadPhase: "loaded", // Start as loaded
   search: "",
   statusFilter: "",
   leaveFilter: "",
-  activeStat: "", // "" | "absentToday" | "onLeaveToday" | "presentToday" | "exhausted"
+  activeStat: "",
   forceErrorNext: false,
+  currentView: "manager",
+  isManagerLoggedIn: false,
+  loggedInStaff: null,
+  selectedStatus: "",
+  selectedLeaveType: "Casual Leave",
 };
 
+const TODAY = new Date().toISOString().split('T')[0];
 const MUSTER_DATE = RECORDS.reduce((max, r) => (r.date > max ? r.date : max), RECORDS[0].date);
 
 function fmtDate(d){
@@ -89,9 +83,17 @@ function fmtDate(d){
   return dt.toLocaleDateString("en-GB", {day:"2-digit", month:"short", year:"numeric"});
 }
 
+function generateId() {
+  const maxId = RECORDS.reduce((max, r) => {
+    const num = parseInt(r.record_id.substring(1));
+    return num > max ? num : max;
+  }, 0);
+  return "R" + String(maxId + 1).padStart(3, '0');
+}
+
 /* ======================= DERIVED HELPERS ======================= */
 function recordsForStaff(staffId){
-  return RECORDS.filter(r => r.staff_id === staffId).sort((a,b) => a.date.localeCompare(b.date));
+  return RECORDS.filter(r => r.staff_id === staffId).sort((a,b) => b.date.localeCompare(a.date));
 }
 
 function staffSummary(staffId){
@@ -104,7 +106,6 @@ function staffSummary(staffId){
       else totalTaken += r.days_taken;
     }
   });
-  // latest recorded balance (most recent record with a non-null balance)
   let latestBalance = null;
   for (let i = recs.length - 1; i >= 0; i--) {
     if (recs[i].balance_remaining !== null && recs[i].balance_remaining !== undefined) {
@@ -124,6 +125,252 @@ function isExhausted(staffId){
 
 function uniqueStaffIds(){
   return [...new Set(RECORDS.map(r => r.staff_id))];
+}
+
+function getStaffName(staffId){
+  const record = RECORDS.find(r => r.staff_id === staffId);
+  return record ? record.staff_name : staffId;
+}
+
+/* ======================= VIEW TOGGLE ======================= */
+function switchView(view) {
+  state.currentView = view;
+  
+  if (view === 'manager') {
+    document.getElementById('managerView').style.display = 'block';
+    document.getElementById('staffView').style.display = 'none';
+    
+    if (!state.isManagerLoggedIn) {
+      document.getElementById('managerLoginSection').style.display = 'block';
+      document.getElementById('managerDashboard').style.display = 'none';
+    } else {
+      document.getElementById('managerLoginSection').style.display = 'none';
+      document.getElementById('managerDashboard').style.display = 'block';
+      renderAll();
+    }
+  } else {
+    document.getElementById('managerView').style.display = 'none';
+    document.getElementById('staffView').style.display = 'block';
+    document.getElementById('todayDateLabel').textContent = fmtDate(TODAY);
+    
+    if (!state.loggedInStaff) {
+      document.getElementById('staffLoginSection').style.display = 'block';
+      document.getElementById('staffDashboard').style.display = 'none';
+    }
+    populateStaffLoginSelect();
+  }
+  
+  document.querySelectorAll('.toggle-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === view);
+  });
+}
+
+/* ======================= MANAGER LOGIN ======================= */
+function handleManagerLogin() {
+  const password = document.getElementById('managerPassword').value;
+  const messageEl = document.getElementById('managerLoginMessage');
+
+  if (password !== MANAGER_PASSWORD) {
+    messageEl.className = 'login-message error';
+    messageEl.textContent = '❌ Incorrect password. Please try again.';
+    return;
+  }
+
+  state.isManagerLoggedIn = true;
+  messageEl.className = 'login-message success';
+  messageEl.textContent = '✅ Login successful!';
+
+  document.getElementById('managerLoginSection').style.display = 'none';
+  document.getElementById('managerDashboard').style.display = 'block';
+  document.getElementById('managerPassword').value = '';
+  
+  // Load the data immediately
+  state.loadPhase = "loaded";
+  renderAll();
+}
+
+function handleManagerLogout() {
+  state.isManagerLoggedIn = false;
+  document.getElementById('managerLoginSection').style.display = 'block';
+  document.getElementById('managerDashboard').style.display = 'none';
+  document.getElementById('managerLoginMessage').className = 'login-message';
+  document.getElementById('managerLoginMessage').textContent = '';
+}
+
+/* ======================= STAFF LOGIN ======================= */
+function populateStaffLoginSelect() {
+  const select = document.getElementById('loginStaffSelect');
+  const uniqueStaff = [...new Set(RECORDS.map(r => r.staff_id))];
+  select.innerHTML = '<option value="">— Choose your name —</option>';
+  uniqueStaff.forEach(id => {
+    const name = getStaffName(id);
+    select.innerHTML += `<option value="${id}">${name} (${id})</option>`;
+  });
+}
+
+function handleStaffLogin() {
+  const staffId = document.getElementById('loginStaffSelect').value;
+  const password = document.getElementById('loginPassword').value;
+  const messageEl = document.getElementById('loginMessage');
+
+  if (!staffId) {
+    messageEl.className = 'login-message error';
+    messageEl.textContent = '❌ Please select your name.';
+    return;
+  }
+
+  if (password !== STAFF_PIN) {
+    messageEl.className = 'login-message error';
+    messageEl.textContent = '❌ Invalid PIN. Please try again.';
+    return;
+  }
+
+  state.loggedInStaff = staffId;
+  const staffName = getStaffName(staffId);
+  
+  messageEl.className = 'login-message success';
+  messageEl.textContent = `✅ Welcome, ${staffName}!`;
+
+  document.getElementById('staffLoginSection').style.display = 'none';
+  document.getElementById('staffDashboard').style.display = 'block';
+  document.getElementById('loggedInStaffName').textContent = staffName;
+  
+  loadStaffDashboard(staffId);
+}
+
+function handleStaffLogout() {
+  state.loggedInStaff = null;
+  document.getElementById('staffLoginSection').style.display = 'block';
+  document.getElementById('staffDashboard').style.display = 'none';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginMessage').className = 'login-message';
+  document.getElementById('loginMessage').textContent = '';
+}
+
+/* ======================= STAFF DASHBOARD ======================= */
+function loadStaffDashboard(staffId) {
+  updateStaffHistory(staffId);
+  updateStaffLeaveSummary(staffId);
+  checkTodayAttendance(staffId);
+}
+
+function updateStaffLeaveSummary(staffId) {
+  const summary = staffSummary(staffId);
+  const el = document.getElementById('staffLeaveSummary');
+  
+  el.innerHTML = `
+    <div class="summary-item">
+      <span class="label">Total Leave Taken:</span>
+      <span class="value">${summary.totalTaken} days</span>
+    </div>
+    <div class="summary-item">
+      <span class="label">Current Balance:</span>
+      <span class="value ${summary.latestBalance !== null && summary.latestBalance <= 2 ? 'low-balance' : ''}">
+        ${summary.latestBalance !== null ? summary.latestBalance + ' days' : '—'}
+      </span>
+    </div>
+    <div class="summary-item">
+      <span class="label">Total Entries:</span>
+      <span class="value">${summary.recs.length}</span>
+    </div>
+  `;
+}
+
+function updateStaffHistory(staffId) {
+  const historyList = document.getElementById('staffHistoryList');
+  if (!staffId) {
+    historyList.innerHTML = '<p class="empty-history">Login to view your history.</p>';
+    return;
+  }
+
+  const recs = recordsForStaff(staffId);
+  if (recs.length === 0) {
+    historyList.innerHTML = '<p class="empty-history">No records found.</p>';
+    return;
+  }
+
+  historyList.innerHTML = recs.slice(0, 15).map(r => `
+    <div class="history-item">
+      <span class="history-date">${fmtDate(r.date)}</span>
+      <span class="history-status ${r.status.toLowerCase().replace(' ', '-')}">${r.status}</span>
+      ${r.leave_type ? `<span class="history-leave">${r.leave_type}</span>` : ''}
+      <span class="history-balance">Balance: ${r.balance_remaining !== null ? r.balance_remaining : '—'}</span>
+    </div>
+  `).join('');
+}
+
+function checkTodayAttendance(staffId) {
+  const todayRecord = RECORDS.find(r => r.staff_id === staffId && r.date === TODAY);
+  const messageEl = document.getElementById('staffAttendanceMessage');
+  
+  if (todayRecord) {
+    messageEl.className = 'attendance-message info';
+    messageEl.textContent = `ℹ️ You have already marked attendance for today as "${todayRecord.status}". You can update it below.`;
+  } else {
+    messageEl.className = 'attendance-message';
+    messageEl.textContent = '';
+  }
+}
+
+function markStaffAttendance() {
+  const staffId = state.loggedInStaff;
+  const status = state.selectedStatus;
+  const leaveType = document.getElementById('staffLeaveTypeSelect').value;
+  const messageEl = document.getElementById('staffAttendanceMessage');
+
+  if (!staffId) {
+    messageEl.className = 'attendance-message error';
+    messageEl.textContent = '❌ Please login first.';
+    return;
+  }
+
+  if (!status) {
+    messageEl.className = 'attendance-message error';
+    messageEl.textContent = '❌ Please select an attendance status.';
+    return;
+  }
+
+  let daysTaken = null;
+  if (status === 'Half Day') daysTaken = 0.5;
+  else if (status === 'On Leave' && leaveType !== 'Unpaid Leave') daysTaken = 1;
+  else if (status === 'On Leave' && leaveType === 'Unpaid Leave') daysTaken = 0;
+
+  const summary = staffSummary(staffId);
+  let newBalance = summary.latestBalance;
+  if (newBalance !== null && daysTaken !== null) {
+    newBalance = Math.round((newBalance - daysTaken) * 100) / 100;
+  }
+
+  const newRecord = {
+    record_id: generateId(),
+    staff_id: staffId,
+    staff_name: getStaffName(staffId),
+    date: TODAY,
+    status: status,
+    leave_type: (status === 'On Leave' || status === 'Half Day') ? leaveType : null,
+    days_taken: daysTaken,
+    balance_remaining: newBalance
+  };
+
+  const existingIndex = RECORDS.findIndex(r => r.staff_id === staffId && r.date === TODAY);
+  if (existingIndex !== -1) {
+    RECORDS.splice(existingIndex, 1);
+  }
+
+  RECORDS.push(newRecord);
+  
+  messageEl.className = 'attendance-message success';
+  messageEl.textContent = `✅ Attendance marked successfully as "${status}"!`;
+  
+  loadStaffDashboard(staffId);
+  
+  if (state.isManagerLoggedIn) {
+    renderAll();
+  }
+
+  state.selectedStatus = '';
+  document.querySelectorAll('.attendance-btn').forEach(btn => btn.classList.remove('selected'));
+  document.getElementById('staffLeaveTypeGroup').style.display = 'none';
 }
 
 /* ======================= RENDER: STATS ======================= */
@@ -179,6 +426,15 @@ function getFiltered(){
   return list.sort((a,b) => b.date.localeCompare(a.date));
 }
 
+function updateRowCounter(filteredCount) {
+  const counterNumber = document.getElementById('counterNumber');
+  const counterTotal = document.getElementById('counterTotal');
+  const totalRecords = RECORDS.length;
+  
+  counterNumber.textContent = filteredCount;
+  counterTotal.textContent = totalRecords;
+}
+
 /* ======================= RENDER: LIST ======================= */
 function statusBadge(status){
   const map = {
@@ -195,27 +451,14 @@ function renderList(){
   const body = document.getElementById("listBody");
   const countPill = document.getElementById("countPill");
 
-  if (state.loadPhase === "loading") {
-    countPill.textContent = "loading…";
-    body.innerHTML = Array.from({length:5}).map(() => `<div class="skeleton-row"></div>`).join("");
-    return;
-  }
-
-  if (state.loadPhase === "error") {
-    countPill.textContent = "—";
-    body.innerHTML = `
-      <div class="state-box">
-        <span class="icon">⚠</span>
-        <h3>Couldn't load the register</h3>
-        <p>The connection to the muster sheet failed. Check your connection and try again.</p>
-        <button class="retry-btn" id="retryBtn" type="button">Retry</button>
-      </div>`;
-    document.getElementById("retryBtn").addEventListener("click", () => loadData(false));
+  // Always show data when manager is logged in
+  if (!state.isManagerLoggedIn) {
     return;
   }
 
   const filtered = getFiltered();
   countPill.textContent = `Showing ${filtered.length} of ${RECORDS.length} records`;
+  updateRowCounter(filtered.length);
 
   if (filtered.length === 0) {
     body.innerHTML = `
@@ -226,7 +469,10 @@ function renderList(){
         <button class="retry-btn" id="clearBtn" type="button">Clear filters</button>
       </div>`;
     document.getElementById("clearBtn").addEventListener("click", () => {
-      state.search = ""; state.statusFilter = ""; state.leaveFilter = ""; state.activeStat = "";
+      state.search = ""; 
+      state.statusFilter = ""; 
+      state.leaveFilter = ""; 
+      state.activeStat = "";
       document.getElementById("searchInput").value = "";
       document.getElementById("statusFilter").value = "";
       document.getElementById("leaveFilter").value = "";
@@ -333,6 +579,15 @@ document.addEventListener("keydown", (e) => {
 });
 
 /* ======================= EVENTS ======================= */
+document.getElementById("managerViewBtn").addEventListener("click", () => switchView("manager"));
+document.getElementById("staffViewBtn").addEventListener("click", () => switchView("staff"));
+
+document.getElementById("managerLoginBtn").addEventListener("click", handleManagerLogin);
+document.getElementById("managerPassword").addEventListener("keypress", (e) => {
+  if (e.key === "Enter") handleManagerLogin();
+});
+document.getElementById("managerLogoutBtn").addEventListener("click", handleManagerLogout);
+
 document.getElementById("searchInput").addEventListener("input", (e) => {
   state.search = e.target.value;
   renderList();
@@ -347,19 +602,49 @@ document.getElementById("leaveFilter").addEventListener("change", (e) => {
 });
 document.getElementById("simErrorBtn").addEventListener("click", () => {
   state.forceErrorNext = true;
-  loadData(true);
+  simulateError();
 });
 
-/* ======================= LOAD SIMULATION ======================= */
-function loadData(forceErrorFlagAlreadySet){
-  state.loadPhase = "loading";
-  renderList();
-  const willError = state.forceErrorNext;
-  state.forceErrorNext = false;
-  setTimeout(() => {
-    state.loadPhase = willError ? "error" : "loaded";
+document.getElementById("loginBtn").addEventListener("click", handleStaffLogin);
+document.getElementById("loginPassword").addEventListener("keypress", (e) => {
+  if (e.key === "Enter") handleStaffLogin();
+});
+document.getElementById("logoutBtn").addEventListener("click", handleStaffLogout);
+
+document.querySelectorAll('.attendance-btn').forEach(btn => {
+  btn.addEventListener("click", function() {
+    document.querySelectorAll('.attendance-btn').forEach(b => b.classList.remove('selected'));
+    this.classList.add('selected');
+    state.selectedStatus = this.dataset.status;
+    
+    const leaveTypeGroup = document.getElementById('staffLeaveTypeGroup');
+    if (this.dataset.status === 'On Leave' || this.dataset.status === 'Half Day') {
+      leaveTypeGroup.style.display = 'block';
+    } else {
+      leaveTypeGroup.style.display = 'none';
+    }
+  });
+});
+
+document.getElementById("staffSubmitAttendanceBtn").addEventListener("click", markStaffAttendance);
+
+/* ======================= ERROR SIMULATION ======================= */
+function simulateError() {
+  // Just reset the view to show error state temporarily
+  const body = document.getElementById("listBody");
+  const countPill = document.getElementById("countPill");
+  
+  countPill.textContent = "—";
+  body.innerHTML = `
+    <div class="state-box">
+      <span class="icon">⚠</span>
+      <h3>Couldn't load the register</h3>
+      <p>The connection to the muster sheet failed. Check your connection and try again.</p>
+      <button class="retry-btn" id="retryBtn" type="button">Retry</button>
+    </div>`;
+  document.getElementById("retryBtn").addEventListener("click", () => {
     renderAll();
-  }, 650);
+  });
 }
 
 function renderAll(){
@@ -367,4 +652,5 @@ function renderAll(){
   renderList();
 }
 
-loadData(false);
+// Initialize - show manager login
+switchView("manager");
